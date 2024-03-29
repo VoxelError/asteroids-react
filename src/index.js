@@ -1,19 +1,10 @@
+import { draw_score, draw_high_score, high_score, set_high_score, draw_text } from "./hud.js"
+import { pi, floor, random, sin, cos, rng, to_radians, distance, to_array, } from "./math.js"
+import { default_ship, draw_lasers } from "./ship.js"
 import { fxExplode, fxHit, fxLaser, fxThrust } from "./sounds"
 
 const canvas = document.getElementById("game_canvas")
 const context = canvas.getContext("2d")
-
-const pi = Math.PI
-const { floor, random } = Math
-const sin = (value) => Math.sin(value)
-const cos = (value) => Math.cos(value)
-const rng = (range, min = 1) => floor(Math.random() * range) + min
-const to_radians = (num) => (num * pi) / 180
-const distance = (x1, y1, x2, y2) => Math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2))
-const to_array = (length, fill = 0) => Array(length).fill(fill)
-
-const high_score = () => localStorage.getItem("highscore") ?? 0
-const set_high_score = (value) => localStorage.setItem("highscore", value)
 
 const debug_collisions = false
 const debug_dot = false
@@ -27,28 +18,6 @@ let game_score
 let game_level
 let game_lives
 let flicker = 0
-
-const default_ship = () => {
-	return {
-		x: canvas.width / 2,
-		y: canvas.height / 2,
-		r: 15,
-		a: to_radians(90),
-		blink_num: 15,
-		blink_time: 6,
-		can_shoot: true,
-		is_dead: false,
-		has_crashed: false,
-		explode_time: 0,
-		lasers: [],
-		rot: 0,
-		is_thrusting: false,
-		thrust: {
-			x: 0,
-			y: 0
-		}
-	}
-}
 
 document.addEventListener("keydown", (event) => {
 	if (ship.is_dead) return
@@ -66,12 +35,6 @@ document.addEventListener("keyup", (event) => {
 	event.code == "ArrowLeft" && (ship.rot = 0)
 	event.code == "Space" && (ship.can_shoot = true)
 })
-
-const new_life = () => {
-	game_lives--
-	ship = default_ship()
-	game_lives <= 0 && game_over()
-}
 
 const new_level = () => {
 	asteroids_list.length = 0
@@ -92,14 +55,8 @@ const new_game = () => {
 	game_level = 0
 	game_score = 0
 	game_lives = 3
-	ship = default_ship()
+	ship = default_ship(canvas.width, canvas.height)
 	new_level()
-}
-
-const game_over = () => {
-	ship.is_dead = true
-	text_content = "Game Over"
-	text_alpha = 1.0
 }
 
 const new_asteroid = (x, y, r) => {
@@ -152,40 +109,6 @@ const shoot_laser = () => {
 	ship.can_shoot = false
 }
 
-const draw_space = () => {
-	context.fillStyle = "black"
-	context.fillRect(0, 0, canvas.width, canvas.height)
-}
-
-const draw_collision = (x, y, r) => {
-	context.strokeStyle = "lime"
-	context.beginPath()
-	context.arc(x, y, r, 0, pi * 2, false)
-	context.stroke()
-}
-
-const draw_dot = () => {
-	context.fillStyle = "red"
-	context.fillRect(ship.x - 1, ship.y - 1, 2, 2)
-}
-
-const draw_score = () => {
-	context.textAlign = "right"
-	context.textBaseline = "middle"
-	context.fillStyle = "white"
-	context.font = "20px Emulogic"
-	context.fillText(game_score, canvas.width - 15, 30)
-}
-
-const draw_high_score = () => {
-	context.textAlign = "center"
-	context.textBaseline = "middle"
-	context.fillStyle = "white"
-	context.font = "20px Emulogic"
-	context.fillText("HIGH SCORE", canvas.width / 2, 30)
-	context.fillText(high_score(), canvas.width / 2, 60)
-}
-
 const draw_asteroids = () => asteroids_list.forEach((asteroid) => {
 	const { x, y, r, a, vert } = asteroid
 	const offsets = asteroid.offs
@@ -201,29 +124,21 @@ const draw_asteroids = () => asteroids_list.forEach((asteroid) => {
 	context.closePath()
 	context.stroke()
 
-	debug_collisions && draw_collision(x, y, r)
-})
-
-const draw_lasers = () => ship.lasers.forEach((laser) => {
-	if (laser.explode_time != 0) return
-	context.beginPath()
-	context.arc(laser.x, laser.y, 1.8, 0, 2 * pi)
-	context.fillStyle = "white"
-	context.fill()
-})
-
-const draw_text = () => {
-	context.textAlign = "center"
-	context.textBaseline = "middle"
-	context.fillStyle = `rgba(255, 255, 255, ${text_alpha})`
-	context.font = `small-caps 40px Emulogic`
-	if (text_alpha > 0) {
-		context.fillText(text_content, canvas.width / 2, canvas.height * 0.75)
-		text_alpha -= 0.008
-	} else {
+	if (debug_collisions) {
+		context.strokeStyle = "lime"
 		context.beginPath()
+		context.arc(x, y, r, 0, pi * 2, false)
+		context.stroke()
 	}
-}
+})
+
+// const draw_lasers = () => ship.lasers.forEach((laser) => {
+// 	if (laser.explode_time != 0) return
+// 	context.beginPath()
+// 	context.arc(laser.x, laser.y, 1.8, 0, 2 * pi)
+// 	context.fillStyle = "white"
+// 	context.fill()
+// })
 
 const thrust_ship = () => {
 	const { x, y, r, a } = ship
@@ -356,7 +271,17 @@ const draw_ship = () => {
 
 	if (ship.explode_time > 0) {
 		ship.explode_time--
-		ship.explode_time == 0 && new_life()
+
+		if (ship.explode_time == 0) {
+			game_lives--
+			ship = default_ship(canvas.width, canvas.height)
+
+			if (game_lives <= 0) {
+				ship.is_dead = true
+				text_content = "Game Over"
+				text_alpha = 1.0
+			}
+		}
 	} else {
 		ship.a += ship.rot
 		ship.x += ship.thrust.x / 2
@@ -365,30 +290,36 @@ const draw_ship = () => {
 		!ship.is_dead && ship.blink_num == 0 && ship_crash()
 	}
 
-	debug_collisions && draw_collision(ship.x, ship.y, ship.r)
-	debug_dot && draw_dot()
+	if (debug_collisions) {
+		context.strokeStyle = "lime"
+		context.beginPath()
+		context.arc(ship.x, ship.y, ship.r, 0, pi * 2, false)
+		context.stroke()
+	}
+	if (debug_dot) {
+		context.fillStyle = "red"
+		context.fillRect(ship.x - 1, ship.y - 1, 2, 2)
+	}
 }
-
-const draw_lives = () => to_array(game_lives).forEach((v, i) => draw_hull((i * 36) + 30, 30, pi / 2))
 
 setInterval(() => {
 	game_lives ?? new_game()
 	ship.is_dead && text_alpha <= 0 && new_game()
 	!asteroids_list.length && new_level()
 
-	draw_space()
+	context.clearRect(0, 0, canvas.width, canvas.height)
 
-	draw_lives()
-	draw_high_score()
-	draw_score()
-
-	draw_text()
+	draw_high_score(context, high_score(), canvas.width)
+	draw_score(context, game_score, canvas.width)
+	draw_text(context, text_alpha, text_content, canvas.width, canvas.height)
+	to_array(game_lives).forEach((v, i) => draw_hull((i * 36) + 30, 30, pi / 2))
+	text_alpha > 0 && (text_alpha -= 0.008)
 
 	move_ship()
 	draw_ship()
 
 	move_lasers()
-	draw_lasers()
+	draw_lasers(context, ship)
 
 	move_asteroids()
 	draw_asteroids()
