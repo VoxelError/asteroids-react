@@ -1,9 +1,12 @@
-import { pi, to_radians } from "./math"
+import { pi, cos, sin, to_radians, distance } from "./math"
+import { fxExplode, fxLaser, fxThrust } from "./sounds"
 
-export const default_ship = (width, height) => {
+let flicker = 0
+
+export const default_ship = (canvas) => {
 	return {
-		x: width / 2,
-		y: height / 2,
+		x: canvas.width / 2,
+		y: canvas.height / 2,
 		r: 15,
 		a: to_radians(90),
 		blink_num: 15,
@@ -22,10 +25,149 @@ export const default_ship = (width, height) => {
 	}
 }
 
+const brake_ship = (ship) => {
+	const friction = 0.006
+	ship.thrust.x -= (ship.thrust.x * friction)
+	ship.thrust.y -= (ship.thrust.y * friction)
+	fxThrust.stop()
+}
+
+const thrust_ship = (context, ship) => {
+	const { x, y, r, a } = ship
+
+	ship.thrust.x += (cos(a) * 0.083)
+	ship.thrust.y -= (sin(a) * 0.083)
+	fxThrust.play()
+
+	flicker++
+	flicker > 4 && (flicker = 0)
+
+	if (ship.explode_time <= 0 && ship.blink_num % 2 == 0) {
+		context.beginPath()
+		context.moveTo(
+			x - r * (2 / 3 * cos(a) + 0.5 * sin(a)),
+			y + r * (2 / 3 * sin(a) - 0.5 * cos(a))
+		)
+		context.lineTo(
+			x - r * 5 / 3 * cos(a),
+			y + r * 5 / 3 * sin(a)
+		)
+		context.lineTo(
+			x - r * (2 / 3 * cos(a) - 0.5 * sin(a)),
+			y + r * (2 / 3 * sin(a) + 0.5 * cos(a))
+		)
+		context.closePath()
+		context.strokeStyle = "white"
+		flicker > 2 && context.stroke()
+	}
+}
+
+export const move_ship = (canvas, context, ship) => {
+	ship.is_thrusting && !ship.is_dead ? thrust_ship(context, ship) : brake_ship(ship)
+
+	ship.x < 0 - ship.r && (ship.x = canvas.width + ship.r)
+	ship.x > canvas.width + ship.r && (ship.x = 0 - ship.r)
+	ship.y < 0 - ship.r && (ship.y = canvas.height + ship.r)
+	ship.y > canvas.height + ship.r && (ship.y = 0 - ship.r)
+}
+
+export const draw_hull = (context, x, y, r, a) => {
+	context.beginPath()
+	context.moveTo(
+		x + (4 / 3) * r * cos(a),
+		y - (4 / 3) * r * sin(a)
+	)
+	context.lineTo(
+		x - ((cos(a) * 2 / 3) + sin(a)) * r,
+		y + ((sin(a) * 2 / 3) - cos(a)) * r
+	)
+	context.lineTo(
+		x - ((cos(a) * 2 / 3) - sin(a)) * r,
+		y + ((sin(a) * 2 / 3) + cos(a)) * r
+	)
+	context.closePath()
+	context.strokeStyle = "white"
+	context.stroke()
+}
+
+// ship, context, game_lives, canvas, game_text, asteroids_list, destroy_asteroid
+export const draw_ship = (ship, context, game_lives, canvas, game_text, asteroids_list, destroy_asteroid) => {
+	if (ship.explode_time > 0) {
+		context.beginPath()
+		context.arc(ship.x, ship.y, ship.r * 1.5, 0, pi * 2, false)
+		context.fillStyle = "white"
+		context.fill()
+	} else {
+		ship.blink_num % 2 == 0 && !ship.is_dead && draw_hull(context, ship.x, ship.y, ship.r, ship.a)
+		ship.blink_num > 0 && ship.blink_time--
+		if (ship.blink_time == 0) {
+			ship.blink_time = 6
+			ship.blink_num--
+		}
+	}
+
+	if (ship.explode_time > 0) {
+		ship.explode_time--
+
+		if (ship.explode_time == 0) {
+			game_lives--
+			ship = default_ship(canvas)
+
+			if (game_lives <= 0) {
+				ship.is_dead = true
+				game_text = ["Game Over", 1]
+			}
+		}
+	} else {
+		ship.a += ship.rot
+		ship.x += ship.thrust.x / 2
+		ship.y += ship.thrust.y / 2
+
+		if (!ship.is_dead && ship.blink_num == 0) {
+			asteroids_list.forEach((asteroid, index) => {
+				if (distance(ship.x, ship.y, asteroid.x, asteroid.y) < ship.r + asteroid.r) {
+					destroy_asteroid(asteroid, index)
+					ship.explode_time = 20
+					ship.can_shoot = false
+					fxExplode.play()
+				}
+			})
+		}
+	}
+}
+
+export const move_lasers = (canvas, ship) => ship.lasers.forEach((laser, index) => {
+	laser.x += laser.xv
+	laser.y += laser.yv
+	laser.dist += Math.hypot(laser.xv, laser.yv)
+	laser.dist > (canvas.width * 0.6) && ship.lasers.splice(index, 1)
+
+	laser.x < 0 && (laser.x = canvas.width)
+	laser.x > canvas.width && (laser.x = 0)
+	laser.y < 0 && (laser.y = canvas.height)
+	laser.y > canvas.height && (laser.y = 0)
+})
+
 export const draw_lasers = (context, ship) => ship.lasers.forEach((laser) => {
-	if (laser.explode_time != 0) return
 	context.beginPath()
 	context.arc(laser.x, laser.y, 1.8, 0, 2 * pi)
 	context.fillStyle = "white"
 	context.fill()
 })
+
+export const shoot_laser = (ship) => {
+	const { x, y, r, a } = ship
+	const laser_speed = 8
+
+	if (ship.can_shoot && ship.lasers.length < 10) {
+		ship.lasers.push({
+			x: x + (4 / 3) * r * cos(a),
+			y: y - (4 / 3) * r * sin(a),
+			xv: laser_speed * cos(a),
+			yv: -laser_speed * sin(a),
+			dist: 0
+		})
+		fxLaser.play()
+	}
+	ship.can_shoot = false
+}

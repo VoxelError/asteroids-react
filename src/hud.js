@@ -1,5 +1,3 @@
-import { to_array } from "./math"
-
 export const high_score = () => localStorage.getItem("highscore") ?? 0
 export const set_high_score = (value) => localStorage.setItem("highscore", value)
 
@@ -20,11 +18,11 @@ export const draw_score = (context, score, width) => {
 	context.fillText(score, width - 15, 30)
 }
 
-export const draw_text = (context, alpha, content, width, height) => {
+export const draw_text = (context, text, width, height) => {
 	context.textAlign = "center"
 	context.textBaseline = "middle"
-	context.fillStyle = `rgba(255, 255, 255, ${alpha})`
+	context.fillStyle = `rgba(255, 255, 255, ${text[1]})`
 	context.font = `small-caps 40px Emulogic`
 
-	alpha > 0 && context.fillText(content, width / 2, height * 0.75)
+	text[1] > 0 && context.fillText(text[0], width / 2, height * 0.75)
 }
