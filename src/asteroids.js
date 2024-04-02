@@ -1,4 +1,5 @@
 import { pi, sin, cos, distance, random, rng, to_array } from "./math"
+import { fxExplode, fxHit } from "./sounds"
 
 export const new_asteroid = (x, y, r, game_level, asteroids_list) => {
 	const angle = random() * pi * 2
@@ -39,11 +40,40 @@ export const draw_asteroids = (context, asteroids_list) => asteroids_list.forEac
 	context.stroke()
 })
 
-export const break_asteroids = (asteroids_list, ship, destroy_asteroid) => asteroids_list.forEach((asteroid, index) => {
-	ship.lasers.forEach((laser, i) => {
-		if (distance(asteroid.x, asteroid.y, laser.x, laser.y) < asteroid.r) {
-			destroy_asteroid(asteroid, index)
-			ship.lasers.splice(i, 1)
+export const break_asteroid = (index, asteroids_list, game_score, game_level) => {
+	const { x, y, r } = asteroids_list[index]
+
+	if (r == 50) {
+		game_score += 20
+		new_asteroid(x, y, 25, game_level, asteroids_list)
+		new_asteroid(x, y, 25, game_level, asteroids_list)
+	} else if (r == 25) {
+		game_score += 50
+		new_asteroid(x, y, 12.5, game_level, asteroids_list)
+		new_asteroid(x, y, 12.5, game_level, asteroids_list)
+	} else game_score += 100
+
+	asteroids_list.splice(index, 1)
+	fxHit.play()
+}
+
+export const hit_asteroid = (asteroids_list, ship, game_score, game_level) => {
+	asteroids_list.forEach((asteroid, index) => {
+		ship.lasers.forEach((laser, i) => {
+			if (distance(laser.x, laser.y, asteroid.x, asteroid.y) < asteroid.r) {
+				ship.lasers.splice(i, 1)
+				break_asteroid(index, asteroids_list, game_score, game_level)
+			}
+		})
+
+		if (!ship.is_dead && ship.blink_num == 0) {
+			if (distance(ship.x, ship.y, asteroid.x, asteroid.y) < asteroid.r + ship.r) {
+				ship.has_crashed = true
+				ship.crash_timer = 20
+				ship.can_shoot = false
+				break_asteroid(index, asteroids_list, game_score, game_level)
+				fxExplode.play()
+			}
 		}
 	})
-})
+}

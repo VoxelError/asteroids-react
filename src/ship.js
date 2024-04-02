@@ -97,7 +97,7 @@ export const crash_ship = (ship, context, new_life) => {
 	new_life()
 }
 
-export const draw_ship = (ship, context, asteroids_list, destroy_asteroid) => {
+export const draw_ship = (ship, context) => {
 	ship.a += ship.rot
 	ship.x += ship.thrust.x / 2
 	ship.y += ship.thrust.y / 2
@@ -109,24 +109,12 @@ export const draw_ship = (ship, context, asteroids_list, destroy_asteroid) => {
 		ship.blink_num--
 	}
 
-	if (!ship.is_dead && ship.blink_num == 0) {
-		asteroids_list.forEach((asteroid, index) => {
-			if (distance(ship.x, ship.y, asteroid.x, asteroid.y) < ship.r + asteroid.r) {
-				destroy_asteroid(asteroid, index)
-				ship.has_crashed = true
-				ship.crash_timer = 20
-				ship.can_shoot = false
-				fxExplode.play()
-			}
-		})
-	}
-
 	if (ship.has_crashed) return
 	if (ship.blink_num % 2 != 0) return
 	if (ship.thrust_timer <= 2) return
 
 	const { x, y, r, a } = ship
-	
+
 	context.beginPath()
 	context.moveTo(
 		x - r * (2 / 3 * cos(a) + 0.5 * sin(a)),
