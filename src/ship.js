@@ -1,69 +1,64 @@
 import { pi, cos, sin, to_radians, distance } from "./math"
 import { fxExplode, fxLaser, fxThrust } from "./sounds"
 
-let flicker = 0
-
-export const default_ship = (canvas) => {
-	return {
-		x: canvas.width / 2,
-		y: canvas.height / 2,
-		r: 15,
-		a: to_radians(90),
-		blink_num: 15,
-		blink_time: 6,
-		can_shoot: true,
-		is_dead: false,
-		has_crashed: false,
-		explode_time: 0,
-		lasers: [],
-		rot: 0,
-		is_thrusting: false,
-		thrust: {
-			x: 0,
-			y: 0
-		}
+export const init_ship = (canvas) => ({
+	x: canvas.width / 2,
+	y: canvas.height / 2,
+	r: 15,
+	a: to_radians(90),
+	blink_num: 15,
+	blink_time: 6,
+	can_shoot: true,
+	is_dead: false,
+	has_crashed: false,
+	crash_timer: 0,
+	lasers: [],
+	rot: 0,
+	is_thrusting: false,
+	thrust_timer: 0,
+	thrust: {
+		x: 0,
+		y: 0
 	}
+})
+
+export const key_down = (event, ship) => {
+	if (ship.is_dead) return
+	event.code == "ArrowUp" && (ship.is_thrusting = true)
+	event.code == "ArrowRight" && (ship.rot = -to_radians(3))
+	event.code == "ArrowLeft" && (ship.rot = to_radians(3))
+	if (ship.has_crashed) return
+	event.code == "Space" && shoot_laser(ship)
+
+	event.code == "Delete" && console.log(ship.thrust)
 }
 
-const brake_ship = (ship) => {
-	const friction = 0.006
-	ship.thrust.x -= (ship.thrust.x * friction)
-	ship.thrust.y -= (ship.thrust.y * friction)
-	fxThrust.stop()
+export const key_up = (event, ship) => {
+	if (ship.is_dead) return
+	event.code == "ArrowUp" && (ship.is_thrusting = false)
+	event.code == "ArrowRight" && (ship.rot = 0)
+	event.code == "ArrowLeft" && (ship.rot = 0)
+	event.code == "Space" && (ship.can_shoot = true)
 }
 
-const thrust_ship = (context, ship) => {
-	const { x, y, r, a } = ship
+export const move_ship = (canvas, ship) => {
+	if (ship.is_dead) return
 
-	ship.thrust.x += (cos(a) * 0.083)
-	ship.thrust.y -= (sin(a) * 0.083)
-	fxThrust.play()
+	if (ship.is_thrusting) {
+		const { a } = ship
 
-	flicker++
-	flicker > 4 && (flicker = 0)
+		ship.thrust.x += (cos(a) * 0.083)
+		ship.thrust.y -= (sin(a) * 0.083)
+		fxThrust.play()
 
-	if (ship.explode_time <= 0 && ship.blink_num % 2 == 0) {
-		context.beginPath()
-		context.moveTo(
-			x - r * (2 / 3 * cos(a) + 0.5 * sin(a)),
-			y + r * (2 / 3 * sin(a) - 0.5 * cos(a))
-		)
-		context.lineTo(
-			x - r * 5 / 3 * cos(a),
-			y + r * 5 / 3 * sin(a)
-		)
-		context.lineTo(
-			x - r * (2 / 3 * cos(a) - 0.5 * sin(a)),
-			y + r * (2 / 3 * sin(a) + 0.5 * cos(a))
-		)
-		context.closePath()
-		context.strokeStyle = "white"
-		flicker > 2 && context.stroke()
+		ship.thrust_timer++
+		ship.thrust_timer > 4 && (ship.thrust_timer = 0)
+	} else {
+		ship.thrust_timer = 0
+		Math.abs(ship.thrust.y) > 0.05 ? (ship.thrust.y *= 0.994) : ship.thrust.y = 0
+		Math.abs(ship.thrust.x) > 0.05 ? (ship.thrust.x *= 0.994) : ship.thrust.x = 0
+		fxThrust.stop()
 	}
-}
-
-export const move_ship = (canvas, context, ship) => {
-	ship.is_thrusting && !ship.is_dead ? thrust_ship(context, ship) : brake_ship(ship)
 
 	ship.x < 0 - ship.r && (ship.x = canvas.width + ship.r)
 	ship.x > canvas.width + ship.r && (ship.x = 0 - ship.r)
@@ -90,50 +85,64 @@ export const draw_hull = (context, x, y, r, a) => {
 	context.stroke()
 }
 
-// ship, context, game_lives, canvas, game_text, asteroids_list, destroy_asteroid
-export const draw_ship = (ship, context, game_lives, canvas, game_text, asteroids_list, destroy_asteroid) => {
-	if (ship.explode_time > 0) {
-		context.beginPath()
-		context.arc(ship.x, ship.y, ship.r * 1.5, 0, pi * 2, false)
-		context.fillStyle = "white"
-		context.fill()
-	} else {
-		ship.blink_num % 2 == 0 && !ship.is_dead && draw_hull(context, ship.x, ship.y, ship.r, ship.a)
-		ship.blink_num > 0 && ship.blink_time--
-		if (ship.blink_time == 0) {
-			ship.blink_time = 6
-			ship.blink_num--
-		}
+export const crash_ship = (ship, context, new_life) => {
+	context.beginPath()
+	context.arc(ship.x, ship.y, ship.r * 1.5, 0, pi * 2, false)
+	context.fillStyle = "white"
+	context.fill()
+
+	ship.crash_timer--
+	if (ship.crash_timer > 0) return
+	ship.has_crashed = false
+	new_life()
+}
+
+export const draw_ship = (ship, context, asteroids_list, destroy_asteroid) => {
+	ship.a += ship.rot
+	ship.x += ship.thrust.x / 2
+	ship.y += ship.thrust.y / 2
+
+	ship.blink_num % 2 == 0 && !ship.is_dead && draw_hull(context, ship.x, ship.y, ship.r, ship.a)
+	ship.blink_num > 0 && ship.blink_time--
+	if (ship.blink_time == 0) {
+		ship.blink_time = 6
+		ship.blink_num--
 	}
 
-	if (ship.explode_time > 0) {
-		ship.explode_time--
-
-		if (ship.explode_time == 0) {
-			game_lives--
-			ship = default_ship(canvas)
-
-			if (game_lives <= 0) {
-				ship.is_dead = true
-				game_text = ["Game Over", 1]
+	if (!ship.is_dead && ship.blink_num == 0) {
+		asteroids_list.forEach((asteroid, index) => {
+			if (distance(ship.x, ship.y, asteroid.x, asteroid.y) < ship.r + asteroid.r) {
+				destroy_asteroid(asteroid, index)
+				ship.has_crashed = true
+				ship.crash_timer = 20
+				ship.can_shoot = false
+				fxExplode.play()
 			}
-		}
-	} else {
-		ship.a += ship.rot
-		ship.x += ship.thrust.x / 2
-		ship.y += ship.thrust.y / 2
-
-		if (!ship.is_dead && ship.blink_num == 0) {
-			asteroids_list.forEach((asteroid, index) => {
-				if (distance(ship.x, ship.y, asteroid.x, asteroid.y) < ship.r + asteroid.r) {
-					destroy_asteroid(asteroid, index)
-					ship.explode_time = 20
-					ship.can_shoot = false
-					fxExplode.play()
-				}
-			})
-		}
+		})
 	}
+
+	if (ship.has_crashed) return
+	if (ship.blink_num % 2 != 0) return
+	if (ship.thrust_timer <= 2) return
+
+	const { x, y, r, a } = ship
+	
+	context.beginPath()
+	context.moveTo(
+		x - r * (2 / 3 * cos(a) + 0.5 * sin(a)),
+		y + r * (2 / 3 * sin(a) - 0.5 * cos(a))
+	)
+	context.lineTo(
+		x - r * 5 / 3 * cos(a),
+		y + r * 5 / 3 * sin(a)
+	)
+	context.lineTo(
+		x - r * (2 / 3 * cos(a) - 0.5 * sin(a)),
+		y + r * (2 / 3 * sin(a) + 0.5 * cos(a))
+	)
+	context.closePath()
+	context.strokeStyle = "white"
+	context.stroke()
 }
 
 export const move_lasers = (canvas, ship) => ship.lasers.forEach((laser, index) => {

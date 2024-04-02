@@ -31,11 +31,11 @@ export const draw_asteroids = (context, asteroids_list) => asteroids_list.forEac
 		: y + (r * offsets[index] * sin(a + (index * pi * 2 / vert)))
 	)
 
-	context.strokeStyle = "grey"
 	context.beginPath()
 	context.moveTo(vertex(true, 0), vertex(false, 0))
 	offsets.forEach((v, index) => context.lineTo(vertex(true, index), vertex(false, index)))
 	context.closePath()
+	context.strokeStyle = "grey"
 	context.stroke()
 })
 
